@@ -207,6 +207,10 @@ reg.register_strategy("nn.conv1d", strategy.conv1d_strategy)
 reg.register_strategy("nn.conv2d", strategy.conv2d_strategy)
 
 
+#reduced_input
+reg.register_strategy("nn.reduced_input", strategy.reduced_input_strategy)
+
+
 @reg.register_alter_op_layout("nn.conv2d")
 def alter_op_layout_conv2d(attrs, inputs, tinfos, out_type):
     """Alternate the layout of conv2d"""
@@ -1232,6 +1236,15 @@ def conv_shape_func(attrs, inputs, _):
         )
 
     return [shape_func(inputs[0], inputs[1], convert(strides), convert(padding), convert(dilation))]
+
+
+
+def reduced_input_shape_func(attrs, inputs, _):
+    out = output_tensor((attrs.weight_shape,) , "int32")
+    return out
+
+reg.register_shape_func("nn.reduced_input", False, reduced_input_shape_func)
+
 
 
 reg.register_shape_func("nn.conv1d", False, conv_shape_func)

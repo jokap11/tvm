@@ -32,6 +32,48 @@
 namespace tvm {
 namespace relay {
 
+/*! \brief Attributes used in reduced input checksum for non-unit-strided convolutions */
+struct ReducedInputAttrs : public tvm::AttrsNode<ReducedInputAttrs> {
+  Array<IndexExpr> strides;
+  int groups;
+  IndexExpr channels;
+  Array<IndexExpr> weight_shape;
+  tvm::String data_layout;
+  tvm::String kernel_layout;
+  DataType out_dtype;
+
+  TVM_DECLARE_ATTRS(ReducedInputAttrs, "relay.attrs.ReducedInputAttrs") {
+    TVM_ATTR_FIELD(strides)
+        .set_default(Array<IndexExpr>({1, 1}))
+        .describe("Specifies the strides of the convolution.");
+    TVM_ATTR_FIELD(groups).set_default(1).describe(
+        "Allows the detection of depthwise or standard Convolution for Filter dimension")
+        .set_default(1);
+    TVM_ATTR_FIELD(channels)
+        .set_default(IntImm(DataType::Int(32), 1))
+        .describe("Specifies output channel size.");
+    TVM_ATTR_FIELD(weight_shape)
+        .describe("Specifies the strides(only 2D).");
+    TVM_ATTR_FIELD(data_layout)
+        .set_default("NCHW")
+        .describe(
+            "Dimension ordering of input data. Can be 'NCHW', 'NHWC'"
+            "'N', 'C', 'H', 'W' stands for batch, channel, height, and width"
+            "dimensions respectively. Convolution is applied on the 'H' and"
+            "'W' dimensions.");
+    TVM_ATTR_FIELD(kernel_layout)
+        .set_default("OIHW")
+        .describe(
+            "Dimension ordering of weight. Can be 'OIHW' 'HWOI' etc."
+            "'O', 'I', 'H', 'W' stands for num_filter, input_channel, height, and width"
+            "dimensions respectively.");
+    TVM_ATTR_FIELD(out_dtype)
+        .set_default(DataType::Int(32))
+        .describe("Output data type");
+  }
+};
+
+
 /*!
  * \brief Add a 1D Tensor to an axis of a data.
  *

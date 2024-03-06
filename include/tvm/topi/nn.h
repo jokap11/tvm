@@ -644,6 +644,146 @@ inline tvm::te::Tensor batch_to_space_nd(const tvm::te::Tensor& data,
   return out;
 }
 
+
+struct tensor_data_dim_pos
+{
+  int pos_N, pos_C, pos_H, pos_W;
+  tensor_data_dim_pos(int N, int C, int H, int W): pos_N(N), pos_C(C), pos_H(H), pos_W(W){};
+};
+
+
+struct tensor_weight_dim_pos
+{
+  int pos_O, pos_I, pos_H, pos_W;
+  tensor_weight_dim_pos(int O, int I, int H, int W): pos_O(O), pos_I(I), pos_H(H), pos_W(W){};
+};
+
+/*!
+ * \brief Reshape the batch dimension into spatial dimensions.
+ *
+ * \param data The input tensor.
+ * \param groups Only used for depth-wise conv2d
+ * \param weight_shape The size of the corresponding weight block.
+ * \param kernel_layout The kernel layout.
+ * \param data_layout The data layout.
+ * \param tag The tag to mark the operation.
+ *
+ * \return A Tensor whose op member is the reduced_input operation
+ */
+inline tvm::te::Tensor reduced_input(const tvm::te::Tensor& data,
+                                         const tvm::Array<PrimExpr>& strides,
+                                         int groups,
+                                         const PrimExpr& channels,
+                                         const tvm::Array<PrimExpr>& weight_shape,
+                                         const String& kernel_layout,
+                                         const String& data_layout,
+                                         std::string name = "reduced_input",
+                                         std::string tag = "weight_shape_reduction") {
+  // Construct new tensor with other topi functions depicting input checksum from Hari. et. Al
+  Array<PrimExpr> data_shape = data->shape;
+
+  // Know dimension position of data and kernel layout
+  ICHECK_EQ(data_layout.length(), 4) <<  "data layout needs to be 4-dimensional";
+  ICHECK_EQ(kernel_layout.length(), 4) <<  "data layout needs to be 4-dimensional";
+
+
+  //searches data_layout for position of each Dimension position
+  tensor_data_dim_pos data_dim_pos(
+    static_cast<std::string>(data_layout).find("N"),
+    static_cast<std::string>(data_layout).find("C"),
+    static_cast<std::string>(data_layout).find("H"),
+    static_cast<std::string>(data_layout).find("W")
+  );
+
+  tensor_weight_dim_pos weight_dim_pos(
+    static_cast<std::string>(kernel_layout).find("O"),
+    static_cast<std::string>(kernel_layout).find("I"),
+    static_cast<std::string>(kernel_layout).find("H"),
+    static_cast<std::string>(kernel_layout).find("W")
+  );
+
+
+  int weight_channels;
+  // Batch/Filternr. fixed to one
+  if(GetConstInt(channels) == groups){ //simple depthwise test
+    weight_channels = GetConstInt(weight_shape[weight_dim_pos.pos_O]);
+  }else{ //standard
+    weight_channels = GetConstInt(weight_shape[weight_dim_pos.pos_I]);
+  };
+
+  int weight_height = GetConstInt(weight_shape[weight_dim_pos.pos_H]);
+  int data_height = GetConstInt(data_shape[data_dim_pos.pos_H]);
+  int weight_width = GetConstInt(weight_shape[weight_dim_pos.pos_W]);
+  int data_width = GetConstInt(data_shape[data_dim_pos.pos_W]);
+
+  Array<Integer> sum_up_axes;
+  if (data_layout == "NCHW") {
+    sum_up_axes = {Integer(2), Integer(3)};
+  } else {  // if(orig_conv_attr->data_layout == "NHWC"){
+    sum_up_axes = {Integer(1), Integer(2)};
+  }
+
+
+  //stays constant over each iteration
+  Array<Integer> fourD_strides;
+  if (data_layout == "NCHW") {
+    fourD_strides = {
+      Integer(1),
+      Integer(1),
+      Integer(Downcast<IntImm>(strides[0])->value),
+      Integer(Downcast<IntImm>(strides[1])->value)
+    };
+  }else {  // if(orig_conv_attr->data_layout == "NHWC"){
+    fourD_strides = {
+      Integer(1),
+      Integer(Downcast<IntImm>(strides[0])->value),
+      Integer(Downcast<IntImm>(strides[1])->value),
+      Integer(1)
+    };
+  }
+
+  Array<te::Tensor> channel_array;
+  for (size_t pos_c = 0; pos_c < weight_channels; pos_c++) {
+    Array<te::Tensor> height_array;
+    for (size_t pos_y = 0; pos_y < weight_height; pos_y++) {
+      Array<te::Tensor> width_array;
+      for (size_t pos_x = 0; pos_x < weight_width; pos_x++) {
+          Array<Integer> begin;
+          if (data_layout == "NCHW") {
+            begin = {Integer(0), Integer(pos_c), Integer(pos_y), Integer(pos_x)};
+          }else{  // if(orig_conv_attr->data_layout == "NHWC"){
+            begin = {Integer(0), Integer(pos_y), Integer(pos_x), Integer(pos_c)};
+          }
+
+          Array<Integer> end;
+          if (data_layout == "NCHW") {
+            end = {
+              Integer(1),
+              Integer(pos_c + 1),
+              Integer(data_height - (weight_height - pos_y) + 1),
+              Integer(data_width - (weight_width - pos_x) + 1),
+            };
+          }else{  // if(orig_conv_attr->data_layout == "NHWC"){
+            end = {
+              Integer(1),
+              Integer(data_height - (weight_height - pos_y) + 1),
+              Integer(data_width - (weight_width - pos_x) + 1),
+              Integer(pos_c + 1),
+            };
+          }
+        Tensor slice = strided_slice(data, begin, end, fourD_strides);
+        Tensor slice_32bit = cast(slice,DataType::Int(32));
+        Tensor slice_sum = sum(slice_32bit, sum_up_axes, true);
+        width_array.push_back(slice_sum);
+      }
+      height_array.push_back(concatenate(width_array, data_dim_pos.pos_W));
+    }
+    channel_array.push_back(concatenate(height_array, data_dim_pos.pos_H));
+  }
+  Tensor output = concatenate(channel_array, data_dim_pos.pos_C);
+  return output;
+}
+
 /*!
  * \brief Negative log likelihood loss.
  *

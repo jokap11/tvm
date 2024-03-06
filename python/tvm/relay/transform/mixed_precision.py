@@ -135,6 +135,7 @@ DEFAULT_NEVER_LIST = [
     "arange",
     # Ops that could involve a large summation are not allowed in fp16.
     "nn.global_avg_pool2d",
+    "nn.reduced_input",
     "nn.adaptive_avg_pool1d",
     "nn.adaptive_avg_pool2d",
     "nn.adaptive_avg_pool3d",
