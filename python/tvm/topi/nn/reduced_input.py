@@ -19,8 +19,7 @@
 from __future__ import absolute_import
 from . import cpp
 
-def reduced_input(data, strides: list, group: int, channels,
-                  weight_shape: list,  kernel_layout:str, data_layout:str):
+def reduced_input(data, strides: list, weight_shape: list,  kernel_layout:str, data_layout:str):
     """Applies the reduced input checksum opertaion on the input array (Hari et al).
 
     Reduces data dimension to the according filter dimension for non unit strided conv2D
@@ -30,10 +29,6 @@ def reduced_input(data, strides: list, group: int, channels,
         The input data to the operator.
     strides: list,
         strides of original conv2d -> extended to 4D due to strided slicing 
-    group: int,
-        split data into groups from original convolutions
-    channels: int,
-        output convolutions (only used for simplified depth-wise conv2d check)
     weight_shape: list,
         weight shape required to infer output dimension (use filter-wise sum size ;))
     kernel_layout:str,
@@ -44,4 +39,4 @@ def reduced_input(data, strides: list, group: int, channels,
     result : tvm.te.Tensor
         The result of dropout
     """
-    return cpp.nn.reduced_input(data, strides, group, channels, weight_shape,  kernel_layout, data_layout)
+    return cpp.nn.reduced_input(data, strides, weight_shape,  kernel_layout, data_layout)

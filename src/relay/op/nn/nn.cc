@@ -114,14 +114,8 @@ bool ReducedInputRel(const Array<Type>& types, int num_inputs, const Attrs& attr
   std::vector<IndexExpr> oshape(wnum_axis);
   oshape[weight_dim_pos.pos_H] = param->weight_shape[weight_dim_pos.pos_H];
   oshape[weight_dim_pos.pos_W] = param->weight_shape[weight_dim_pos.pos_W];
-
-  if( static_cast<int>(Downcast<IntImm>(param->channels)->value) == param->groups){ //simple depthwise test
-    oshape[weight_dim_pos.pos_O] = param->weight_shape[weight_dim_pos.pos_I];
-    oshape[weight_dim_pos.pos_I] = param->weight_shape[weight_dim_pos.pos_O];
-  }else{ //standard
-    oshape[weight_dim_pos.pos_O] = param->weight_shape[weight_dim_pos.pos_O];
-    oshape[weight_dim_pos.pos_I] = param->weight_shape[weight_dim_pos.pos_I];
-  };
+  oshape[weight_dim_pos.pos_O] = param->weight_shape[weight_dim_pos.pos_O];
+  oshape[weight_dim_pos.pos_I] = param->weight_shape[weight_dim_pos.pos_I];
 
   // assume data type is 32 bit for now ;)
   reporter->Assign(types[1], TensorType(Array<IndexExpr>(oshape), DataType::Int(32)));
@@ -133,22 +127,13 @@ bool ReducedInputRel(const Array<Type>& types, int num_inputs, const Attrs& attr
 Array<te::Tensor> ReducedInputCompute(const Attrs& attrs,
   const Array<te::Tensor>& input, const Type& out_type) {
   const ReducedInputAttrs* param = attrs.as<ReducedInputAttrs>();
-
-  ICHECK_EQ(param->data_layout.length(), 4) <<  "data layout needs to be 4-dimensional";
-  ICHECK_EQ(param->kernel_layout.length(), 4) <<  "data layout needs to be 4-dimensional";
-
-
-  return Array<te::Tensor>{topi::reduced_input(input[0], param->strides, param->groups,
-    param->channels, param->weight_shape, param->kernel_layout, param->data_layout)};
+  return Array<te::Tensor>{topi::reduced_input(input[0], param->strides, param->weight_shape, param->kernel_layout, param->data_layout)};
 }
 
 
-Expr MakeReducedInput(Expr data, Shape strides, int group,
-        PrimExpr channels, Shape weight_shape, String kernel_lay, String data_lay) {
+Expr MakeReducedInput(Expr data, Shape strides, Shape weight_shape, String kernel_lay, String data_lay) {
   auto attrs = make_object<ReducedInputAttrs>();
   attrs->strides =  strides;
-  attrs->groups = group;
-  attrs->channels = channels;
   attrs->weight_shape = weight_shape;
   attrs->kernel_layout = kernel_lay;
   attrs->data_layout = data_lay;

@@ -662,7 +662,6 @@ struct tensor_weight_dim_pos
  * \brief Reshape the batch dimension into spatial dimensions.
  *
  * \param data The input tensor.
- * \param groups Only used for depth-wise conv2d
  * \param weight_shape The size of the corresponding weight block.
  * \param kernel_layout The kernel layout.
  * \param data_layout The data layout.
@@ -672,8 +671,6 @@ struct tensor_weight_dim_pos
  */
 inline tvm::te::Tensor reduced_input(const tvm::te::Tensor& data,
                                          const tvm::Array<PrimExpr>& strides,
-                                         int groups,
-                                         const PrimExpr& channels,
                                          const tvm::Array<PrimExpr>& weight_shape,
                                          const String& kernel_layout,
                                          const String& data_layout,
@@ -703,13 +700,14 @@ inline tvm::te::Tensor reduced_input(const tvm::te::Tensor& data,
   );
 
 
-  int weight_channels;
   // Batch/Filternr. fixed to one
-  if(GetConstInt(channels) == groups){ //simple depthwise test
-    weight_channels = GetConstInt(weight_shape[weight_dim_pos.pos_O]);
-  }else{ //standard
-    weight_channels = GetConstInt(weight_shape[weight_dim_pos.pos_I]);
-  };
+  int data_batch = GetConstInt(data_shape[data_dim_pos.pos_N]);
+  ICHECK_EQ(data_batch, 1);
+  int filter_nr = GetConstInt(weight_shape[weight_dim_pos.pos_O]);
+  ICHECK_EQ(filter_nr, 1);
+  int data_channels = GetConstInt(data_shape[data_dim_pos.pos_C]);
+  int weight_channels = GetConstInt(weight_shape[weight_dim_pos.pos_I]);
+  ICHECK_EQ(data_channels, weight_channels);
 
   int weight_height = GetConstInt(weight_shape[weight_dim_pos.pos_H]);
   int data_height = GetConstInt(data_shape[data_dim_pos.pos_H]);

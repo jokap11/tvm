@@ -25,11 +25,10 @@ from tvm.relay.testing.temp_op_attr import TempOpAttr
 
 
 def test_reduced_input_nchw_run():
-    channels =  tvm.tir.IntImm(value=3, dtype="int8")
     data_shape = (1, 3, 4, 4)
     weight_shape = (1,3,2,2)
     x  = relay.var("data", shape=data_shape, dtype="int8")
-    inp = relay.nn.reduced_input(x,(2,2),1, channels, weight_shape, "OIHW", "NCHW")
+    inp = relay.nn.reduced_input(x,(2,2), weight_shape, "OIHW", "NCHW")
     func = relay.Function([x], inp)
     x_data = np.ones(shape=data_shape, dtype=np.int8)
     mod = tvm.IRModule.from_expr(func)
@@ -47,11 +46,10 @@ def test_reduced_input_nchw_run():
 
 
 def test_reduced_input_nchw_run_single():
-    channels =  tvm.tir.IntImm(value=3, dtype="int8")
     data_shape = (1, 1, 4, 4)
     weight_shape = (1,1,2,2)
     x  = relay.var("data", shape=data_shape, dtype="int8")
-    inp = relay.nn.reduced_input(x,(2,2),1, channels, weight_shape, "OIHW", "NCHW")
+    inp = relay.nn.reduced_input(x,(2,2), weight_shape, "OIHW", "NCHW")
     func = relay.Function([x], inp)
     x_data = np.ones(shape=data_shape, dtype=np.int8)
     mod = tvm.IRModule.from_expr(func)
@@ -68,11 +66,10 @@ def test_reduced_input_nchw_run_single():
     tvm.testing.assert_allclose(out, ref)
 
 def test_reduced_input_nchw_asymmetric_run():
-    channels =  tvm.tir.IntImm(value=2, dtype="int8")
     data_shape = (1, 2, 4, 6)
     weight_shape = (1, 2, 2, 2)
     x  = relay.var("data", shape=data_shape, dtype="int8")
-    inp = relay.nn.reduced_input(x,(2,2),1, channels, weight_shape, "OIHW", "NCHW")
+    inp = relay.nn.reduced_input(x,(2,2), weight_shape, "OIHW", "NCHW")
     func = relay.Function([x], inp)
     x_data = np.array([[[[1, 1, 1, 1, 2, 1],
                          [1, 1, 1, 1, 1, 1],
@@ -98,11 +95,10 @@ def test_reduced_input_nchw_asymmetric_run():
     tvm.testing.assert_allclose(out, ref)
 
 def test_reduced_input_nchw_asymmetric_run_2():
-    channels =  tvm.tir.IntImm(value=3, dtype="int8")
     data_shape = (1, 3, 9, 6)
     weight_shape = (1, 3, 3, 3)
     x  = relay.var("data", shape=data_shape, dtype="int8")
-    inp = relay.nn.reduced_input(x,(3,3),1, channels, weight_shape, "OIHW", "NCHW")
+    inp = relay.nn.reduced_input(x,(3,3), weight_shape, "OIHW", "NCHW")
     func = relay.Function([x], inp)
     x_data = np.array([[[[1, 1, 1, 1, 2, 1],
                          [1, 1, 1, 1, 1, 1],
