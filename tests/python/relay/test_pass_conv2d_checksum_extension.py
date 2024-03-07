@@ -60,7 +60,8 @@ def test_single_standard_conv2d():
         y8 = relay.sum(y5, axis=[0, 1, 2, 3])
         y9 = relay.sum(y7, axis=[0, 1, 2, 3])
         y10 = relay.not_equal(y8, y9)
-        y = relay.Tuple([y6, y10])
+        y11 = relay.cast(y10, dtype="int8")
+        y = relay.Tuple([y6, y11])
         return relay.Function(args, y)
         
         
@@ -118,6 +119,7 @@ def test_multiple_standard_conv2d():
         y8 = relay.sum(y5, axis=[0, 1, 2, 3])
         y9 = relay.sum(y7, axis=[0, 1, 2, 3])
         y10 = relay.not_equal(y8, y9)
+        y11 = relay.cast(y10, dtype="int8")
 
         conv2 = relay.nn.conv2d(x, w2, out_dtype="int32")
         convy0 = relay.ones(shape=w2_ones_shape, dtype="int8")
@@ -130,9 +132,10 @@ def test_multiple_standard_conv2d():
         convy8 = relay.sum(convy5, axis=[0, 1, 2, 3])
         convy9 = relay.sum(convy7, axis=[0, 1, 2, 3])
         convy10 = relay.not_equal(convy8, convy9)
+        convy11 = relay.cast(convy10, dtype="int8")
 
         mult_out = relay.Tuple([y,conv2])
-        comp_output = relay.Tuple([mult_out, y10, convy10])
+        comp_output = relay.Tuple([mult_out, y11, convy11])
         return relay.Function(args, comp_output)
 
 
@@ -193,6 +196,8 @@ def test_mixed_conv2d():
         y8 = relay.sum(y5, axis=[0, 1, 2, 3])
         y9 = relay.sum(y7, axis=[0, 1, 2, 3])
         y10 = relay.not_equal(y8, y9)
+        y11 = relay.cast(y10, dtype="int8")
+
 
         conv2 = relay.nn.conv2d(x, w2, out_dtype="int32")
         convy0 = relay.ones(shape=w2_ones_shape, dtype="int8")
@@ -205,9 +210,10 @@ def test_mixed_conv2d():
         convy8 = relay.sum(convy5, axis=[0, 1, 2, 3])
         convy9 = relay.sum(convy7, axis=[0, 1, 2, 3])
         convy10 = relay.not_equal(convy8, convy9)
+        convy11 = relay.cast(convy10, dtype="int8")
 
         mult_out = relay.Tuple([y,conv2])
-        comp_output = relay.Tuple([mult_out, y10, convy10])
+        comp_output = relay.Tuple([mult_out, y11, convy11])
         return relay.Function(args, comp_output)
 
 
@@ -261,7 +267,8 @@ def test_single_depthwise_conv2d():
         y8 = relay.sum(y5, axis=[0, 1, 2, 3])
         y9 = relay.sum(y7, axis=[0, 1, 2, 3])
         y10 = relay.not_equal(y8, y9)
-        y = relay.Tuple([y6, y10])
+        y11 = relay.cast(y10, dtype="int8")
+        y = relay.Tuple([y6, y11])
         return relay.Function(args, y)
 
     def check(x_shape, w_shape, ones_shape):
@@ -308,7 +315,8 @@ def test_single_depthwise_conv2d_nhwc():
         y8 = relay.sum(y5, axis=[0, 1, 2, 3])
         y9 = relay.sum(y7, axis=[0, 1, 2, 3])
         y10 = relay.not_equal(y8, y9)
-        y = relay.Tuple([y6, y10])
+        y11 = relay.cast(y10, dtype="int8")
+        y = relay.Tuple([y6, y11])
         return relay.Function(args, y)
 
     
