@@ -112,13 +112,13 @@ bool ReducedInputRel(const Array<Type>& types, int num_inputs, const Attrs& attr
 
   // calculate output shape (shifted to OIHW for tensor-tensor dot when depthwise)
   std::vector<IndexExpr> oshape(wnum_axis);
-  oshape[weight_dim_pos.pos_H] = param->weight_shape[weight_dim_pos.pos_H];
-  oshape[weight_dim_pos.pos_W] = param->weight_shape[weight_dim_pos.pos_W];
-  oshape[weight_dim_pos.pos_O] = param->weight_shape[weight_dim_pos.pos_O];
-  oshape[weight_dim_pos.pos_I] = param->weight_shape[weight_dim_pos.pos_I];
+  oshape[data_dim_pos.pos_H] = param->weight_shape[weight_dim_pos.pos_H];
+  oshape[data_dim_pos.pos_W] = param->weight_shape[weight_dim_pos.pos_W];
+  oshape[data_dim_pos.pos_N] = param->weight_shape[weight_dim_pos.pos_O];
+  oshape[data_dim_pos.pos_C] = param->weight_shape[weight_dim_pos.pos_I];
 
   // assume data type is 32 bit for now ;)
-  reporter->Assign(types[1], TensorType(Array<IndexExpr>(oshape), DataType::Int(32)));
+  reporter->Assign(types[1], TensorType(oshape, DataType::Int(32)));
   return true;
 }
 

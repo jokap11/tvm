@@ -30,13 +30,13 @@ def reduced_input(data, strides: list, weight_shape: list,  kernel_layout:str, d
     strides: list,
         strides of original conv2d -> extended to 4D due to strided slicing 
     weight_shape: list,
-        weight shape required to infer output dimension (use filter-wise sum size ;))
+        weight shape required to infer output dimension (use filter-wise checksum sum size ;))
     kernel_layout:str,
         Kernel layout required to check on weight shape    data_layout:str
         Data layout of original conv2d required to interpret data shape
     Returns
     -------
     result : tvm.te.Tensor
-        The result of dropout
+        The result of reduced_input with data_layout
     """
     return cpp.nn.reduced_input(data, strides, weight_shape,  kernel_layout, data_layout)

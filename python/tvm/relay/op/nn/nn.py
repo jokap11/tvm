@@ -1980,7 +1980,7 @@ def reduced_input(data: Expr, strides: list, weight_shape: list,  kernel_layout:
     Returns
     -------
     result : tvm.relay.Expr
-        The result of dropout
+        The result of reduced_input with data_layout
     """
     return _make.reduced_input(data, strides, weight_shape, kernel_layout, data_layout)
 

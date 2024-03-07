@@ -667,7 +667,7 @@ struct tensor_weight_dim_pos
  * \param data_layout The data layout.
  * \param tag The tag to mark the operation.
  *
- * \return A Tensor whose op member is the reduced_input operation
+ * \return A Tensor whose op member is the reduced_input operation with original data_layout
  */
 inline tvm::te::Tensor reduced_input(const tvm::te::Tensor& data,
                                          const tvm::Array<PrimExpr>& strides,
@@ -714,12 +714,7 @@ inline tvm::te::Tensor reduced_input(const tvm::te::Tensor& data,
   int weight_width = GetConstInt(weight_shape[weight_dim_pos.pos_W]);
   int data_width = GetConstInt(data_shape[data_dim_pos.pos_W]);
 
-  Array<Integer> sum_up_axes;
-  if (data_layout == "NCHW") {
-    sum_up_axes = {Integer(2), Integer(3)};
-  } else {  // if(orig_conv_attr->data_layout == "NHWC"){
-    sum_up_axes = {Integer(1), Integer(2)};
-  }
+  Array<Integer> sum_up_axes = {Integer(data_dim_pos.pos_H), Integer(data_dim_pos.pos_W)};
 
 
   //stays constant over each iteration
@@ -759,18 +754,18 @@ inline tvm::te::Tensor reduced_input(const tvm::te::Tensor& data,
               Integer(1),
               Integer(pos_c + 1),
               Integer(data_height - (weight_height - pos_y) + 1),
-              Integer(data_width - (weight_width - pos_x) + 1),
+              Integer(data_width  - (weight_width - pos_x) + 1),
             };
           }else{  // if(orig_conv_attr->data_layout == "NHWC"){
             end = {
               Integer(1),
               Integer(data_height - (weight_height - pos_y) + 1),
-              Integer(data_width - (weight_width - pos_x) + 1),
+              Integer(data_width  - (weight_width - pos_x) + 1),
               Integer(pos_c + 1),
             };
           }
         Tensor slice = strided_slice(data, begin, end, fourD_strides);
-        Tensor slice_32bit = cast(slice,DataType::Int(32));
+        Tensor slice_32bit = cast(slice, DataType::Int(32));
         Tensor slice_sum = sum(slice_32bit, sum_up_axes, true);
         width_array.push_back(slice_sum);
       }
