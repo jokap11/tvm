@@ -765,8 +765,7 @@ inline tvm::te::Tensor reduced_input(const tvm::te::Tensor& data,
             };
           }
         Tensor slice = strided_slice(data, begin, end, fourD_strides);
-        Tensor slice_32bit = cast(slice, DataType::Int(32));
-        Tensor slice_sum = sum(slice_32bit, sum_up_axes, true);
+        Tensor slice_sum = sum(slice, sum_up_axes, true);
         width_array.push_back(slice_sum);
       }
       height_array.push_back(concatenate(width_array, data_dim_pos.pos_W));

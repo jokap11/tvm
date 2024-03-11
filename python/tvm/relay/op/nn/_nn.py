@@ -1240,8 +1240,27 @@ def conv_shape_func(attrs, inputs, _):
 
 
 def reduced_input_shape_func(attrs, inputs, _):
-    out = output_tensor((attrs.weight_shape,) , "int32")
-    return out
+    if attrs["data_layout"] == "NCHW":
+        dict = {
+            'HWOI': [attrs.weight_shape[2], attrs.weight_shape[3], attrs.weight_shape[0], attrs.weight_shape[1]],
+            'IOHW': [attrs.weight_shape[1], attrs.weight_shape[0], attrs.weight_shape[2], attrs.weight_shape[3]],
+            'OIHW': [attrs.weight_shape[0], attrs.weight_shape[1], attrs.weight_shape[2], attrs.weight_shape[3]],
+            'OHWI': [attrs.weight_shape[0], attrs.weight_shape[3], attrs.weight_shape[1], attrs.weight_shape[2]]
+            }
+        out_shape = dict[attrs["kernel_layout"]]
+        return output_tensor((out_shape) , "int32")
+
+
+    elif attrs["data_layout"] == "NHWC":
+        dict = {
+            'HWOI': [attrs.weight_shape[2], attrs.weight_shape[0], attrs.weight_shape[1], attrs.weight_shape[3]],
+            'IOHW': [attrs.weight_shape[1], attrs.weight_shape[2], attrs.weight_shape[3], attrs.weight_shape[0]],
+            'OIHW': [attrs.weight_shape[0], attrs.weight_shape[2], attrs.weight_shape[3], attrs.weight_shape[1]],
+            'OHWI': [attrs.weight_shape[0], attrs.weight_shape[1], attrs.weight_shape[2], attrs.weight_shape[3]]
+            }
+        out_shape = dict[attrs["kernel_layout"]]
+        return output_tensor((out_shape) , "int32")
+
 
 reg.register_shape_func("nn.reduced_input", False, reduced_input_shape_func)
 

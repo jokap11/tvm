@@ -112,16 +112,23 @@ bool ReducedInputRel(const Array<Type>& types, int num_inputs, const Attrs& attr
 
   // calculate output shape (shifted to OIHW for tensor-tensor dot when depthwise)
   std::vector<IndexExpr> oshape(wnum_axis);
-  oshape[data_dim_pos.pos_H] = param->weight_shape[weight_dim_pos.pos_H];
-  oshape[data_dim_pos.pos_W] = param->weight_shape[weight_dim_pos.pos_W];
   oshape[data_dim_pos.pos_N] = param->weight_shape[weight_dim_pos.pos_O];
   oshape[data_dim_pos.pos_C] = param->weight_shape[weight_dim_pos.pos_I];
+  oshape[data_dim_pos.pos_H] = param->weight_shape[weight_dim_pos.pos_H];
+  oshape[data_dim_pos.pos_W] = param->weight_shape[weight_dim_pos.pos_W];
 
   // assume data type is 32 bit for now ;)
-  reporter->Assign(types[1], TensorType(oshape, DataType::Int(32)));
+  reporter->Assign(types[1], TensorType(oshape, data->dtype));
   return true;
 }
 
+InferCorrectLayoutOutput ReducedInputInferCorrectLayout(const Attrs& attrs,
+                                                 const Array<Layout>& new_in_layouts,
+                                                 const Array<Layout>& old_in_layouts,
+                                                 const Array<tvm::relay::Type>& old_in_types) {
+  const ReducedInputAttrs* params = attrs.as<ReducedInputAttrs>();
+  return InferCorrectLayoutOutput({params->data_layout}, {params->data_layout}, attrs);
+}
 
 
 Array<te::Tensor> ReducedInputCompute(const Attrs& attrs,
@@ -146,8 +153,8 @@ Expr MakeReducedInput(Expr data, Shape strides, Shape weight_shape, String kerne
 TVM_REGISTER_GLOBAL("relay.op.nn._make.reduced_input").set_body_typed(MakeReducedInput);
 
 RELAY_REGISTER_OP("nn.reduced_input")
-    .describe(R"code(reduced 2D input of an array for each individual channel (one batch-4D tensor required).
-
+    .describe(R"code(reduced 2D input of an array for each individual channel (one batch-4D tensor required thus casted required prior to calc).
+output->dtype = input->dtype
 Examples:: (attr.stride=[2,2], attr.kernel_size= [3,3])
 
   x = [[[  1,   6,    11,  16 , 21],
@@ -168,6 +175,7 @@ Examples:: (attr.stride=[2,2], attr.kernel_size= [3,3])
     .set_support_level(1)
     .set_attrs_type<ReducedInputAttrs>()
     .add_type_rel("ReducedInput", ReducedInputRel)
+    .set_attr<FInferCorrectLayout>("FInferCorrectLayout", ReducedInputInferCorrectLayout)
     .set_attr<TOpIsStateful>("TOpIsStateful", false)
     .set_attr<FTVMCompute>("FTVMCompute", ReducedInputCompute)
     .set_attr<TOpPattern>("TOpPattern", kOpaque);
