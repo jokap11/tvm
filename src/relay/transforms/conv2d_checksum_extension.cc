@@ -329,8 +329,8 @@ tvm::runtime::ObjectPtr<tvm::relay::TransposeAttrs> infer_axis_transpose_from_ke
   {
     {"OIHW" , {Integer(1),Integer(0),Integer(2),Integer(3)}},
     {"IOHW" , {Integer(1),Integer(0),Integer(2),Integer(3)}},
-    {"HWIO" , {Integer(0),Integer(1),Integer(3),Integer(2)}},
-    {"HWOI" , {Integer(0),Integer(1),Integer(3),Integer(2)}},
+    {"HWIO" , {Integer(0),Integer(1),Integer(2),Integer(3)}},
+    {"HWOI" , {Integer(0),Integer(1),Integer(2),Integer(3)}},
   };
   trans_attr->axes = transpos_res[orig_conv_attr->kernel_layout];
   return trans_attr;
