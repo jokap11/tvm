@@ -384,6 +384,8 @@ def compile_model(
         mod = relay.transform.InferType()(mod)
         mod = relay.transform.Extend2DConv()(mod)
         mod = relay.transform.InferType()(mod)
+        mod = relay.transform.ExtendDense()(mod)
+        mod = relay.transform.InferType()(mod)
         mod = relay.transform.FoldConstant()(mod)
         mod = relay.transform.InferType()(mod)
         mod = relay.transform.EliminateCommonSubexpr()(mod)
