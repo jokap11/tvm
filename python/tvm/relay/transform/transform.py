@@ -152,6 +152,22 @@ def Extend2DConv():
     return _ffi_api.Extend2DConv()
 
 
+def ExtendDense():
+    """Extend a dense operation with 2 additional checksums to detect soft faults (see Huang/Hari et. al.)
+
+    Returns
+    -------
+    ret : tvm.transform.Pass
+        The registered pass to add checksum operations.
+
+    Note
+    ----
+    Has to append each checksum calculation on the output since data
+    structure is a recursive dataflow tree, instead of a simple replace :(
+    """
+    return _ffi_api.ExtendDense()
+
+
 def BackwardFoldScaleAxis():
     """Backward fold axis scaling into weights of conv2d/dense.
 
