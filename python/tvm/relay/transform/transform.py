@@ -136,36 +136,16 @@ def FoldScaleAxis():
     """
     return _ffi_api.FoldScaleAxis()
 
-def Extend2DConv():
-    """Extend a conv2d operation with additional checksum to detect soft faults (see Hari et. al.)
 
+def GlobalAbedProt():
+    """
+    Global ABED pass combining all methods (FIC/MVP/DuplicateIsland)
     Returns
     -------
     ret : tvm.transform.Pass
-        The registered pass to add checksum operations.
-
-    Note
-    ----
-    Has to append each checksum calculation on the output since data
-    structure is a recursive dataflow tree, instead of a simple replace :(
+        The registered pass for global abed
     """
-    return _ffi_api.Extend2DConv()
-
-
-def ExtendDense():
-    """Extend a dense operation with 2 additional checksums to detect soft faults (see Huang/Hari et. al.)
-
-    Returns
-    -------
-    ret : tvm.transform.Pass
-        The registered pass to add checksum operations.
-
-    Note
-    ----
-    Has to append each checksum calculation on the output since data
-    structure is a recursive dataflow tree, instead of a simple replace :(
-    """
-    return _ffi_api.ExtendDense()
+    return _ffi_api.GlobalAbedProt()
 
 
 def BackwardFoldScaleAxis():

@@ -16,6 +16,7 @@
  * specific language governing permissions and limitations
  * under the License.
  * Changed by Kappes Johannes @2024
+ * TU Vienna ECS
  */
 
 /*!
@@ -57,9 +58,6 @@
  * and convert them into subgraphs with actual integer operations on x and w. Only interesting side fact is that the dense operator 
  * implicitly transposes the second input. Consequently leading to different axis usage for v,w= 1 vectors, which equaly row/coloumwise summation. 
  *
- * The pass does this via a 2 level approach:
- *
- * After that, two new Call Node are attached to the the top level of the function for each found operator, forming a Top level output tuple.
  * For Readability reasons x,w is copied
  * The used Algorithm is showed here:
  * 
@@ -185,173 +183,110 @@ TVM_REGISTER_GLOBAL("relay.analysis.search_dense").set_body_typed(SearchDense);
 
 // We dont want to exchange single nodes in the graph => No Mutation
 
-namespace transform {
 
 
-IRModule ExtendDense(const IRModule& mod) {
-  // required for Add function for module
-  tvm::Map<GlobalVar, Function> updates;
-
-  auto funcs = mod->functions;  // unorderd_map with global var(function name) and function body
-  for (const auto& ele : funcs) {
-    ICHECK_EQ(FreeVars(ele.second).size(), 0);
-    if (const auto* n = ele.second.as<FunctionNode>()) {
-      if (n->GetAttr<String>(attr::kCompiler).defined()) continue;
-      Function func = GetRef<Function>(n);
-      Array<ObjectRef> dense_array = SearchDense(func->body);
-      auto first_exp = func->body;
-      Array<tvm::relay::Expr> output_expr;
-
-      // get existing expression tree
-      if (func->body.as<Tuple>()) {
-        first_exp = Downcast<Tuple>(func->body);
-      } else if (func->body.as<Call>()) {
-        first_exp = Downcast<Call>(func->body);
-      } else {
-        ICHECK_EQ(1, 0) << "func->body should be either Call or Tuple node";
-      }
-      output_expr.push_back(first_exp);
-
-      //Save ops reference to reduce access time
-      const Op& cast_op = Op::Get("cast");
-      const Op& sum_op = Op::Get("sum");
-      const Op& neq_op = Op::Get("not_equal");
-      const Op& dense_op = Op::Get("nn.dense");
+Array<Call> mvp_method(const Expr& origin_expr){
 
 
 
-        ///STATIC ATTRIBUTES
-        //Cast Attr
-        //used to cast bool to aot compatible memory planner
-        auto cast_attr_8bit = make_object<CastAttrs>();
-        cast_attr_8bit->dtype = DataType::Int(8);
-        //32bit
-        auto cast_attr_32bit = make_object<CastAttrs>();
-        cast_attr_32bit->dtype = DataType::Int(32);
-        //64bit
-        auto cast_attr_64bit = make_object<CastAttrs>();
-        cast_attr_64bit->dtype = DataType::Int(64);
-        //elemwise sum operation
-        auto reduce_elemwise_attrs = make_object<ReduceAttrs>();
-        reduce_elemwise_attrs->axis = {0,1};  // 2D -> 0d
-        reduce_elemwise_attrs->keepdims = false;  // 2D -> 0d
-        reduce_elemwise_attrs->exclude  = false;
-        //coloumnwise summation for (y,x) layout
-        auto reduce_coloumnwise_attrs = make_object<ReduceAttrs>();
-        reduce_coloumnwise_attrs->axis = {0};
-        reduce_coloumnwise_attrs->keepdims = true;
-        reduce_coloumnwise_attrs->exclude  = false;
-        //rowwise summation for (y,x) layout
-        auto reduce_rowwise_attrs = make_object<ReduceAttrs>();
-        reduce_rowwise_attrs->axis = {1};
-        reduce_rowwise_attrs->keepdims = true;
-        reduce_rowwise_attrs->exclude  = false;
+    //Save ops reference to reduce access time
+    const Op& cast_op = Op::Get("cast");
+    const Op& sum_op = Op::Get("sum");
+    const Op& neq_op = Op::Get("not_equal");
+    const Op& dense_op = Op::Get("nn.dense");
+
+
+
+    ///STATIC ATTRIBUTES
+    //Cast Attr
+    //used to cast bool to aot compatible memory planner
+    auto cast_attr_8bit = make_object<CastAttrs>();
+    cast_attr_8bit->dtype = DataType::Int(8);
+    //32bit
+    auto cast_attr_32bit = make_object<CastAttrs>();
+    cast_attr_32bit->dtype = DataType::Int(32);
+    //64bit
+    auto cast_attr_64bit = make_object<CastAttrs>();
+    cast_attr_64bit->dtype = DataType::Int(64);
+    //elemwise sum operation
+    auto reduce_elemwise_attrs = make_object<ReduceAttrs>();
+    reduce_elemwise_attrs->axis = {0,1};  // 2D -> 0d
+    reduce_elemwise_attrs->keepdims = false;  // 2D -> 0d
+    reduce_elemwise_attrs->exclude  = false;
+    //coloumnwise summation for (y,x) layout
+    auto reduce_coloumnwise_attrs = make_object<ReduceAttrs>();
+    reduce_coloumnwise_attrs->axis = {0};
+    reduce_coloumnwise_attrs->keepdims = true;
+    reduce_coloumnwise_attrs->exclude  = false;
+    //rowwise summation for (y,x) layout
+    auto reduce_rowwise_attrs = make_object<ReduceAttrs>();
+    reduce_rowwise_attrs->axis = {1};
+    reduce_rowwise_attrs->keepdims = true;
+    reduce_rowwise_attrs->exclude  = false;
 
 
 
 
-      // Add Checksum calc for each dense op in dense_array
-      for (const auto& it : dense_array) {
-        Call origin_dense = Downcast<Call>(it);
-        const auto* input_tensor  = origin_dense->args[0]->type_as<TensorTypeNode>();
-        const auto* weight_tensor = origin_dense->args[1]->type_as<TensorTypeNode>();
+    Call origin_dense = Downcast<Call>(origin_expr);
+    const auto* input_tensor  = origin_dense->args[0]->type_as<TensorTypeNode>();
+    const auto* weight_tensor = origin_dense->args[1]->type_as<TensorTypeNode>();
 
-        ICHECK(input_tensor != nullptr);
-        ICHECK(weight_tensor != nullptr);
+    ICHECK(input_tensor != nullptr);
+    ICHECK(weight_tensor != nullptr);
 
-        const auto* origin_dense_attr = origin_dense->attrs.as<DenseAttrs>();
-        ICHECK(origin_dense_attr != nullptr);
-        //search layout string for position of N,C,H,W in data layout
+    const auto* origin_dense_attr = origin_dense->attrs.as<DenseAttrs>();
+    ICHECK(origin_dense_attr != nullptr);
+    //search layout string for position of N,C,H,W in data layout
 
-        const auto input  = origin_dense->args[0];
-        const auto weight = origin_dense->args[1];
+    const auto input  = origin_dense->args[0];
+    const auto weight = origin_dense->args[1];
 
 
-        /// Equation 1: (v^T * A)B ?= v^T C
+    /// Equation 1: (v^T * A)B ?= v^T C
 
 
-        Call input_32bit(cast_op, {input}, Attrs{cast_attr_32bit});
-        Call input_coloumnwise_sum(sum_op, {input_32bit}, Attrs{reduce_coloumnwise_attrs});   
-        //dense operations for both lhs equation vector matrix multiplications
-        auto dense_attrs = make_object<DenseAttrs>();
-        dense_attrs->out_dtype =  DataType::Int(32);
-        //dense_attrs->units = Downcast<IntImm>(weight_tensor->shape[0]);
-        Call lhs_eq1(dense_op, {input_coloumnwise_sum, weight}, Attrs{dense_attrs});
+    Call input_32bit(cast_op, {input}, Attrs{cast_attr_32bit});
+    Call input_coloumnwise_sum(sum_op, {input_32bit}, Attrs{reduce_coloumnwise_attrs});   
+    //dense operations for both lhs equation vector matrix multiplications
+    auto dense_attrs = make_object<DenseAttrs>();
+    dense_attrs->out_dtype =  DataType::Int(32);
+    //dense_attrs->units = Downcast<IntImm>(weight_tensor->shape[0]);
+    Call lhs_eq1(dense_op, {input_coloumnwise_sum, weight}, Attrs{dense_attrs});
 
-        // v^T C
-        Call fc_32bit(cast_op, {origin_dense}, Attrs{cast_attr_32bit});
-        Call fc_coloumnwise_sum(sum_op, {fc_32bit}, Attrs{reduce_coloumnwise_attrs});
+    // v^T C
+    Call fc_32bit(cast_op, {origin_dense}, Attrs{cast_attr_32bit});
+    Call fc_coloumnwise_sum(sum_op, {fc_32bit}, Attrs{reduce_coloumnwise_attrs});
 
-        // not equal comparison of 2 vectors
-        Call comp_eq1(neq_op, {lhs_eq1, fc_coloumnwise_sum});
-        Call comp_eq1_8bit(cast_op, {comp_eq1}, Attrs{cast_attr_8bit});
-        Call comp_eq1_sum(sum_op, {comp_eq1_8bit}, Attrs{reduce_elemwise_attrs});
-
-        output_expr.push_back(comp_eq1_sum);
+    // not equal comparison of 2 vectors
+    Call comp_eq1(neq_op, {lhs_eq1, fc_coloumnwise_sum});
+    Call comp_eq1_8bit(cast_op, {comp_eq1}, Attrs{cast_attr_8bit});
+    Call comp_eq1_sum(sum_op, {comp_eq1_8bit}, Attrs{reduce_elemwise_attrs});
 
 
-        /// Equation 2: A(Bw) ?= Cw
 
-        // A(Bw)
-        Call weight_32bit(cast_op, {weight}, Attrs{cast_attr_32bit});
-        Call weight_rowwise_sum(sum_op, {weight_32bit}, Attrs{reduce_coloumnwise_attrs}); // weight gets transposed in dense operation
-        //dense operations for both lhs equation vector matrix multiplications
-        auto dense_attrs2 = make_object<DenseAttrs>();
-        dense_attrs2->out_dtype =  DataType::Int(32);
-        //dense_attrs2->units = Downcast<IntImm>(input_tensor->shape[0]);
-        Call lhs_eq2(dense_op, {input, weight_rowwise_sum}, Attrs{dense_attrs2});
-
-        // Cw
-        Call fc_rowwise_sum(sum_op, {fc_32bit}, Attrs{reduce_rowwise_attrs});
-
-        // not equal comparison of 2 vectors
-        Call comp_eq2(neq_op, {lhs_eq2, fc_rowwise_sum});
-        Call comp_eq2_8bit(cast_op, {comp_eq2}, Attrs{cast_attr_8bit});
-        Call comp_eq2_sum(sum_op, {comp_eq2_8bit}, Attrs{reduce_elemwise_attrs});
-
-        output_expr.push_back(comp_eq2_sum);
-      }
+    /// Equation 2: A(Bw) ?= Cw
 
 
-      Tuple new_func_body(output_expr);
-      Array<Type> return_array = {func->ret_type};
-      //first elem==original element
-      TensorType comp_output({}, DataType::Int(8)); //boolean type has dim=0
-      for(uint i=1; i < output_expr.size(); i++){
-        return_array.push_back(comp_output);
-      }
-      TupleType final_ret_type(return_array);
-      Function extended_func(func->params, new_func_body, final_ret_type, func->type_params);
-      
-      updates.Set(ele.first, Downcast<Function>(extended_func));
+    // A(Bw)
+    Call weight_32bit(cast_op, {weight}, Attrs{cast_attr_32bit});
+    Call weight_rowwise_sum(sum_op, {weight_32bit}, Attrs{reduce_coloumnwise_attrs}); // weight gets transposed in dense operation
+    //dense operations for both lhs equation vector matrix multiplications
+    auto dense_attrs2 = make_object<DenseAttrs>();
+    dense_attrs2->out_dtype =  DataType::Int(32);
+    //dense_attrs2->units = Downcast<IntImm>(input_tensor->shape[0]);
+    Call lhs_eq2(dense_op, {input, weight_rowwise_sum}, Attrs{dense_attrs2});
 
-      VLOG(1) << "Print out all dense op which need a treatment: \n"
-              << PrettyPrint(dense_array)
-              << "Print out return type of new function: \n"
-              << PrettyPrint(func->ret_type)
-              << "and the function: \n"
-              << PrettyPrint(extended_func) << std::endl;
+    // Cw
+    Call fc_rowwise_sum(sum_op, {fc_32bit}, Attrs{reduce_rowwise_attrs});
+
+    // not equal comparison of 2 vectors
+    Call comp_eq2(neq_op, {lhs_eq2, fc_rowwise_sum});
+    Call comp_eq2_8bit(cast_op, {comp_eq2}, Attrs{cast_attr_8bit});
+    Call comp_eq2_sum(sum_op, {comp_eq2_8bit}, Attrs{reduce_elemwise_attrs});
+
+    return {comp_eq1_sum, comp_eq2_sum};
     }
-    // Use implemented function to update each global var/ func pair
-    for (auto pair : updates) {
-      mod->Add(pair.first, pair.second, true);
-    }
-  }
-  return mod;
-}
 
-
-
-Pass ExtendDense() {
-  runtime::TypedPackedFunc<IRModule(IRModule, PassContext)> pass_func =
-      [&](IRModule m, PassContext pc) { return ExtendDense(m); };
-
-  return CreateModulePass(pass_func, 0, "ExtendDense", {"InferType"});
-}
-
-TVM_REGISTER_GLOBAL("relay._transform.ExtendDense").set_body_typed([](){return ExtendDense();});
-
-}  // namespace transform
 
 }  // namespace relay
 }  // namespace tvm

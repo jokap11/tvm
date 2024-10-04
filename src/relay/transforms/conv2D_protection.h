@@ -15,14 +15,15 @@
  * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
  * under the License.
- * Changed by Kappes Johannes @2023
+ * Changed by Kappes Johannes @2024
+ * TU Vienna ECS
  */
 
 /*!
  *
- * \file conv2d_checksum_extension.cc
+ * \file conv2D_protection.h
  *
- * \brief Extend each conv2d with a checksum generation (Hari et. al.)
+ * \brief Extend each conv2d with a checksum bit  FIC(https://ieeexplore.ieee.org/document/9366780)/FICdw(https://ieeexplore.ieee.org/document/10137207)
  */
 #include <tvm/ir/expr.h>
 #include <tvm/tir/data_layout.h>
@@ -209,7 +210,6 @@ TVM_REGISTER_GLOBAL("relay.analysis.search_conv2d").set_body_typed(SearchConv2d)
 
 // We dont want to exchange single nodes in the graph => No Mutation
 
-namespace transform {
 
 //Relationship between data and kernel layout for scheduling strategies
 std::unordered_map<std::string, std::string> data_weight_layout_reg_conv2d =
@@ -381,31 +381,8 @@ tensor_weight_dim_pos infer_weight_tensor_dim_pos(const Conv2DAttrs* orig_conv_a
 }
 
 
+  Call fic_method(const Expr& origin_expr){
 
-
-IRModule Extend2DConv(const IRModule& mod) {
-  // required for Add function for module
-  tvm::Map<GlobalVar, Function> updates;
-
-  auto funcs = mod->functions;  // unorderd_map with global var(function name) and function body
-  for (const auto& ele : funcs) {
-    ICHECK_EQ(FreeVars(ele.second).size(), 0);
-    if (const auto* n = ele.second.as<FunctionNode>()) {
-      if (n->GetAttr<String>(attr::kCompiler).defined()) continue;
-      Function func = GetRef<Function>(n);
-      Array<ObjectRef> conv2D_array = SearchConv2d(func->body);
-      auto first_exp = func->body;
-      Array<tvm::relay::Expr> output_expr;
-
-      // get existing expression tree
-      if (func->body.as<Tuple>()) {
-        first_exp = Downcast<Tuple>(func->body);
-      } else if (func->body.as<Call>()) {
-        first_exp = Downcast<Call>(func->body);
-      } else {
-        ICHECK_EQ(1, 0) << "func->body should be either Call or Tuple node";
-      }
-      output_expr.push_back(first_exp);
 
       //Save ops reference to reduce access time
       const Op& conv2d_op = Op::Get("nn.conv2d");
@@ -432,9 +409,9 @@ IRModule Extend2DConv(const IRModule& mod) {
         reduce_elemwise_attrs->exclude  = false;
 
 
-      // Add Checksum calc for each conv2d op in conv2D_array
-      for (const auto& it : conv2D_array) {
-        Call origin_conv2d = Downcast<Call>(it);
+
+
+        Call origin_conv2d = Downcast<Call>(origin_expr);
         const auto* input_tensor  = origin_conv2d->args[0]->type_as<TensorTypeNode>();
         const auto* weight_tensor = origin_conv2d->args[1]->type_as<TensorTypeNode>();
 
@@ -612,49 +589,13 @@ IRModule Extend2DConv(const IRModule& mod) {
         Call comp(neq_op, {ten_ten_prod_right_dim, output_checksum});
         Call comp_8bit(cast_op, {comp}, Attrs(cast_attr_8bit));
 
-        output_expr.push_back(comp_8bit);
-      }
-
-
-      Tuple new_func_body(output_expr);
-      Array<Type> return_array = {func->ret_type};
-      //first elem==original element
-      TensorType comp_output({}, DataType::Int(8)); //boolean type has dim=0
-      for(uint i=1; i < output_expr.size(); i++){
-        return_array.push_back(comp_output);
-      }
-      TupleType final_ret_type(return_array);
-      Function extended_func(func->params, new_func_body, final_ret_type, func->type_params);
-      
-      updates.Set(ele.first, Downcast<Function>(extended_func));
-
-      VLOG(1) << "Print out all conv2d which need a treatment: \n"
-              << PrettyPrint(conv2D_array)
-              << "Print out return type of new function: \n"
-              << PrettyPrint(func->ret_type)
-              << "and the function: \n"
-              << PrettyPrint(extended_func) << std::endl;
+        return comp_8bit;
     }
-    // Use implemented function to update each global var/ func pair
-    for (auto pair : updates) {
-      mod->Add(pair.first, pair.second, true);
-    }
-  }
-  return mod;
-}
 
 
 
-Pass Extend2DConv() {
-  runtime::TypedPackedFunc<IRModule(IRModule, PassContext)> pass_func =
-      [&](IRModule m, PassContext pc) { return Extend2DConv(m); };
 
-  return CreateModulePass(pass_func, 0, "Extend2DConv", {"InferType"});
-}
 
-TVM_REGISTER_GLOBAL("relay._transform.Extend2DConv").set_body_typed([](){return Extend2DConv();});
-
-}  // namespace transform
 
 }  // namespace relay
 }  // namespace tvm
