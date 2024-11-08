@@ -146,6 +146,21 @@ Array<Call> still_to_visit;
   // Internal visiting counter
 std::unordered_map<const ExprNode*, size_t> visit_counter_;
 
+//determines if fork was hit (Required to switch between BFS AND DFS)
+
+
+bool check_constant_creation_in_relayExpr(const Call node){
+    return ( node->op == ones_op || node->op == zeros_op);
+}
+
+
+std::unordered_map<int, tvm::relay::TShapeDataDependent> sum_axes_map =
+{
+  { 1, {Integer(0)}},
+  { 2, {Integer(0),Integer(1)}},
+  { 3, {Integer(0),Integer(1),Integer(2)}},
+  { 4, {Integer(0),Integer(1),Integer(2),Integer(3)}},
+};
 
 
 /// @brief simple Function to handle FIC method (now only a dummy)
@@ -155,10 +170,18 @@ Call protect_conv2d(const Call& last_node){
   for (auto node : last_node->args)
   {
     // skip constant nodes or first input
-    if(node.as<VarNode>() || node.as<ConstantNode>()){
+    if(node.as<VarNode>() || node.as<ConstantNode>() || node.as<GlobalVarNode>()){
       continue;
     }
-    still_to_visit.push_back(Downcast<Call>(node));
+    // multi-path graph and node already visited=duplicated=protected
+    if (visit_counter_.find(node.get()) == visit_counter_.end())
+    {
+      Call last_call_node = Downcast<Call>(node);
+      if(!check_constant_creation_in_relayExpr(last_call_node))
+      {
+        still_to_visit.push_back(last_call_node);
+      }
+    }
   }
   return fic_method(last_node);
 };
@@ -171,14 +194,17 @@ Array<Call> protect_dense(const Call& last_node){
   for (auto node : last_node->args)
   {
     // skip constant nodes or first input
-    if(node.as<VarNode>() || node.as<ConstantNode>()){
+    if(node.as<VarNode>() || node.as<ConstantNode>() || node.as<GlobalVarNode>()){
       continue;
     }
-    still_to_visit.push_back(Downcast<Call>(node));
+    // multi-path graph and node already visited=duplicated=protected
+    if (visit_counter_.find(node.get()) == visit_counter_.end())
+    {
+      still_to_visit.push_back(Downcast<Call>(node));
+    }
   }
   return mvp_method(last_node);
 };
-
 
 
 /// @brief returns Call Node with pushed in between dummy node (for already visited or protected nodes)
@@ -209,14 +235,14 @@ Expr duplicate_island(const Expr& last_node) {
   }
   else
   {
-    visit_counter_.insert({last_node.get(), 1});
     // What about ones/zeros???
-    if(last_node.as<VarNode>() || last_node.as<ConstantNode>())
+    if(last_node.as<VarNode>() || last_node.as<ConstantNode>()  || last_node.as<GlobalVarNode>())
     {
       return last_node;
     }
     else
     {
+      visit_counter_.insert({last_node.get(), 1});
       auto last_op = Downcast<Call>(last_node);
       if (last_op->op == dense_op || last_op->op == conv2d_op)
       {
@@ -224,7 +250,7 @@ Expr duplicate_island(const Expr& last_node) {
         still_to_visit.push_back(last_op);
         return generate_dummy_ref(last_op);
       }
-      else if(last_op->op == ones_op || last_op->op == zeros_op)
+      else if(check_constant_creation_in_relayExpr(last_op))
       {
         // no dummy (since more or less created constant)
         return last_node;
@@ -243,6 +269,38 @@ Expr duplicate_island(const Expr& last_node) {
   }
 }
 
+/// @brief Protect element with index ele_nr in still_to_visit array and append tuple element to output array
+/// @param still_to_visit
+/// @param ele_nr
+/// @param output_array
+void protect_element(size_t ele_nr, Array<Call>& output_array){
+  if (still_to_visit[ele_nr]->op == dense_op)
+  {
+    for (auto mvp_eq : protect_dense(still_to_visit[ele_nr]))
+    {
+      output_array.push_back(mvp_eq);
+    }
+  }
+  else if (still_to_visit[ele_nr]->op == conv2d_op)
+  {
+    output_array.push_back(protect_conv2d(still_to_visit[ele_nr]));
+  }
+  else
+  {
+    auto original_tensor  = still_to_visit[ele_nr]->type_as<TensorTypeNode>();
+    //used to cast bool to aot compatible memory planner
+    //Save ops reference to reduce access time
+    if(!check_constant_creation_in_relayExpr(still_to_visit[ele_nr]))
+    {
+      auto cast_attr_8bit = make_object<CastAttrs>();
+      cast_attr_8bit->dtype = DataType::Int(8);
+      Call comp(neq_op, {still_to_visit[ele_nr],  duplicate_island(still_to_visit[ele_nr])}, Attrs());
+      Call comp_8bit(cast_op, {comp}, Attrs{cast_attr_8bit});
+      Expr comp_sum = MakeReduce(comp_8bit, sum_axes_map[original_tensor->shape.size()], false,  false, "sum");
+      output_array.push_back(Downcast<Call>(comp_sum));
+    }
+  }
+}
 
 
 /// @brief Top level abed protection function -> Duplicates whole exp DAG from end to start while duplicating islands through recursive reconstruction
@@ -275,30 +333,7 @@ Array<Call> full_abed_protection(const Expr& top_node){
     }
     else
     {
-
-      auto original_tensor  = still_to_visit[start_node]->type_as<TensorTypeNode>();
-
-      //used to cast bool to aot compatible memory planner
-      auto cast_attr_8bit = make_object<CastAttrs>();
-      cast_attr_8bit->dtype = DataType::Int(8);
-      //Save ops reference to reduce access time
-
-        std::unordered_map<int, tvm::relay::TShapeDataDependent> sum_axes_map =
-        {
-          { 1, {Integer(0)}},
-          { 2, {Integer(0),Integer(1)}},
-          { 3, {Integer(0),Integer(1),Integer(2)}},
-          { 4, {Integer(0),Integer(1),Integer(2),Integer(3)}},
-        };
-
-
-        Call comp(neq_op, {still_to_visit[start_node],  duplicate_island(still_to_visit[start_node])}, Attrs());
-        Call comp_8bit(cast_op, {comp}, Attrs{cast_attr_8bit});
-      
-        Expr comp_sum = MakeReduce(comp_8bit, sum_axes_map[original_tensor->shape.size()], false,  false, "sum");
-
-
-        output_array.push_back(Downcast<Call>(comp_sum));
+      protect_element(start_node, output_array);
     }
     // VLOG(2) << "Print out still_to_visit array size: \n"<< still_to_visit.size() << std::endl;
   }
