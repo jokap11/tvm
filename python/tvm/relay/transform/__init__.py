@@ -21,3 +21,4 @@ from .transform import *
 from .recast import recast
 from . import fake_quantization_to_integer, mixed_precision
 from .flexible_shape import FlexibleShapeDispatch
+from .moiopt_pass import *
