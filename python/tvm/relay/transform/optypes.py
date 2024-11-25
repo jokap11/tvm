@@ -45,6 +45,8 @@ def getOpType(expr):
         "nn.conv2d_transpose",  # TODO: trivial inversion of conv, but CONV optype might need rework
         "image.resize2d",  # TODO: could be treated as optype POOL, but high arg complexity
         "nn.depth_to_space",  # TODO: could be treated as optype POOL?
+        "ones",
+        "zeros",
     ]:
         # TODO: concat is splitable and possible target of identity transformation
         return OpType.NONE
