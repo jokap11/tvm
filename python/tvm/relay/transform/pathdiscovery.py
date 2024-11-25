@@ -3,11 +3,11 @@ import math
 
 from tvm import relay
 
-from .relay_util import getShape, isFlatten, getSize, normalizePadding, getNormalizedPaddingPair, getTypeSize, exprToStr, hasOverlappingInput, getCallInput
+from .moiopt.relay_util import getShape, isFlatten, getSize, normalizePadding, getNormalizedPaddingPair, getTypeSize, exprToStr, hasOverlappingInput, getCallInput
 # from .moiopt.network import 
 from .moiopt.memplanner import MemoryPlanner, memLayoutWithTimeout
-from .graph_analyzer import GraphAnalyzer
-from .optypes import OpArgType, OpType, getOpArgType, getOpType
+from .moiopt.graph_analyzer import GraphAnalyzer
+from .moiopt.optypes import OpArgType, OpType, getOpArgType, getOpType
 
 
 MAX_PARTITIONS = 25
@@ -1111,7 +1111,7 @@ class PathDiscovery:
         if len(self.splitPaths) == 0:
             return None
 
-        import moiopt
+        from .moiopt_pass import SplitPathPass, FixTupleDepdendencyPass
 
         fusedMod = relay.transform.FuseOps()(mod)
         bestSize = self.evaluateSize(fusedMod)
@@ -1120,10 +1120,10 @@ class PathDiscovery:
         bestPath = None
         for path in self.splitPaths:
             print("PATH:", path)
-            testMod = moiopt.SplitPathPass(path)(mod)
+            testMod = SplitPathPass(path)(mod)
             testMod = relay.transform.InferType()(testMod)
             testMod = relay.transform.FuseOps()(testMod)
-            testMod = moiopt.FixTupleDepdendencyPass()(testMod)
+            testMod = FixTupleDepdendencyPass()(testMod)
             sz = self.evaluateSize(testMod)
             print(path.shortDesc(), "-----", sz)
             if sz < bestSize:

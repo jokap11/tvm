@@ -3,9 +3,9 @@ from tvm import relay
 import numpy as np
 
 from ..expr_functor import ExprMutator, ExprVisitor
-from .graph_analyzer import GraphAnalyzer
+from .moiopt.graph_analyzer import GraphAnalyzer
 from .moiopt.network import Network
-from .relay_util import ReplaceCallPass, FindCall, findFromOtherModule, normalizePadding, isDepthwiseConv, exprToStr
+from .moiopt.relay_util import ReplaceCallPass, FindCall, findFromOtherModule, normalizePadding, isDepthwiseConv, exprToStr
 from .moiopt.memplanner import MemoryPlanner, memLayoutWithTimeout
 from .pathdiscovery import SplitType, PathDiscovery
 from .transform import function_pass

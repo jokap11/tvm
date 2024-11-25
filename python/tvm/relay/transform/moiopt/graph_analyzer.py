@@ -1,8 +1,8 @@
 from collections import defaultdict
 import tvm
 from tvm import relay
-from ..expr_functor import ExprMutator, ExprVisitor
-from .moiopt.network import Network, Schedule
+from ...expr_functor import ExprMutator, ExprVisitor
+from .network import Network, Schedule
 from .relay_util import abbreviateOpName, getCallInput, RelayType 
 
 

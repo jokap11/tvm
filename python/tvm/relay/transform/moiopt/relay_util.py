@@ -4,8 +4,8 @@ import functools
 import tvm
 from tvm import relay
 # Needed to break CycleDeps
-from ..expr_functor import ExprMutator, ExprVisitor
-from .transform import function_pass
+from ...expr_functor import ExprMutator, ExprVisitor
+from ..transform import function_pass
 
 reEndsInNum = re.compile("\\d+$|bool")
 
