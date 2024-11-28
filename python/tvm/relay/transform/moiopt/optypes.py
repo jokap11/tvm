@@ -47,6 +47,7 @@ def getOpType(expr):
         "nn.depth_to_space",  # TODO: could be treated as optype POOL?
         "ones",
         "zeros",
+        "sum",
     ]:
         # TODO: concat is splitable and possible target of identity transformation
         return OpType.NONE

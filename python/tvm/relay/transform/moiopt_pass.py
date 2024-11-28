@@ -5,10 +5,12 @@ import numpy as np
 from ..expr_functor import ExprMutator, ExprVisitor
 from .moiopt.graph_analyzer import GraphAnalyzer
 from .moiopt.network import Network
-from .moiopt.relay_util import ReplaceCallPass, FindCall, findFromOtherModule, normalizePadding, isDepthwiseConv, exprToStr
+from .moiopt.relay_util import ReplaceCallPass, FindCall, findFromOtherModule, normalizePadding
+from .moiopt.relay_util import isDepthwiseConv, exprToStr, getCheckedType
 from .moiopt.memplanner import MemoryPlanner, memLayoutWithTimeout
 from .pathdiscovery import SplitType, PathDiscovery
 from .transform import function_pass
+
 
 def getDominatingBufs(n: Network):
     sched = n.createBestSchedule()
@@ -453,3 +455,59 @@ class MOIOPTPass(ExprMutator):
 
     def transform_module(self, mod, ctx):
         return MOIOPTContext(self.noFTP, self.onlyFTP, self.noRecurse, self.maxPartitions).transform(mod)
+
+
+def save_toplevel_tuple_info(func: relay.ty.FuncType):
+    node_list = []
+    tup = func.body
+    for f in tup.fields:
+        print(f)
+        node_list.append(f)
+        #assert isinstance(tensor_type, relay.ty.TensorType)
+    return node_list
+
+
+# # TODO at a later point: get also original result scheduled accordingly and function signature
+# # Heuristic as the original node has not out_degree=0 Therfore not scheduled to be kept alive till the end
+def order_tuple_according_to_num(outputs, best_sched, analyzer):
+    """Iterate through schedule and append node if in outputs in ordered list"""
+    ordered_tuple_ele = []
+    print("Schedule node")
+    for op in best_sched.sched:
+         print(op)
+         if analyzer.OpToExpr[op] in outputs:
+            ordered_tuple_ele.append(analyzer.OpToExpr[op])
+    return ordered_tuple_ele
+
+
+# used only one to create new function
+def get_new_func_signature(tuple_ele):
+    ret_type = []
+    for ele in tuple_ele:
+        tensor_type = getCheckedType(ele)
+        #tensor_type.size
+        #tensor_type.dtype
+        ret_type.append(tensor_type)
+    return ret_type
+
+
+
+@tvm.ir.transform.module_pass(opt_level=0)
+class MinimizeRAMWithTupleOrder(ExprMutator):
+    def __init__(self):
+        super().__init__()
+
+    def transform_module(self, mod, ctx):
+        top_level_func = mod["main"]
+        analyzer = GraphAnalyzer()
+        analyzer.run(top_level_func)
+        n = analyzer.makeNet()
+        best_sched = n.createBestSchedule()
+
+        node_list = save_toplevel_tuple_info(top_level_func)
+        #print(f"this is the unordered tuple_list {node_list}")
+        ordered_node_list = order_tuple_according_to_num(node_list, best_sched, analyzer)
+        #print(f"this is the ordered tuple_list {ordered_node_list}")
+
+        return  tvm.IRModule.from_expr(relay.Function(top_level_func.params, relay.Tuple(ordered_node_list),
+        relay.ty.TupleType(get_new_func_signature(ordered_node_list))))
