@@ -387,6 +387,9 @@ def compile_model(
         mod = relay.transform.FoldConstant()(mod)
         mod = relay.transform.InferType()(mod)
         mod = relay.transform.EliminateCommonSubexpr()(mod)
+        mod = relay.transform.InferType()(mod)
+        mod = relay.transform.MinimizeRAMWithTupleOrder()(mod)
+        mod = relay.transform.InferType()(mod)
 
         for partition_function, opts in zip(partition_functions, partition_opts):
             mod = partition_function(mod, params, mod_name=mod_name, **opts)
