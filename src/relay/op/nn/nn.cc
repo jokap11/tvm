@@ -132,13 +132,13 @@ InferCorrectLayoutOutput ReducedInputInferCorrectLayout(const Attrs& attrs,
 
 
 
-
-Expr MakeReducedInput(Expr data, Shape strides, Shape weight_shape, String kernel_lay, String data_lay) {
+Expr MakeReducedInput(Expr data, Shape strides, Shape weight_shape, String kernel_lay, String data_lay, String mode) {
   auto attrs = make_object<ReducedInputAttrs>();
   attrs->strides =  strides;
   attrs->weight_shape = weight_shape;
   attrs->kernel_layout = kernel_lay;
   attrs->data_layout = data_lay;
+  attrs->mode = mode;
   attrs->out_dtype = DataType::Int(32); // fixed form now
   static const Op& op = Op::Get("nn.reduced_input");
   return Call(op, {data}, Attrs(attrs), {});
@@ -172,7 +172,6 @@ Examples:: (attr.stride=[2,2], attr.kernel_size= [3,3])
     .add_type_rel("ReducedInput", ReducedInputRel)
     .set_attr<FInferCorrectLayout>("FInferCorrectLayout", ReducedInputInferCorrectLayout)
     .set_attr<TOpIsStateful>("TOpIsStateful", false)
-    .set_attr<FTVMCompute>("FTVMCompute", ReducedInputCompute)
     .set_attr<TOpPattern>("TOpPattern", kOpaque);
 
 

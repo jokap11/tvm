@@ -39,6 +39,7 @@ struct ReducedInputAttrs : public tvm::AttrsNode<ReducedInputAttrs> {
   tvm::String data_layout;
   tvm::String kernel_layout;
   DataType out_dtype;
+  String mode;
 
   TVM_DECLARE_ATTRS(ReducedInputAttrs, "relay.attrs.ReducedInputAttrs") {
     TVM_ATTR_FIELD(strides)
@@ -62,6 +63,9 @@ struct ReducedInputAttrs : public tvm::AttrsNode<ReducedInputAttrs> {
     TVM_ATTR_FIELD(out_dtype)
         .set_default(DataType::Int(32))
         .describe("Output data type");
+    TVM_ATTR_FIELD(mode)
+        .set_default("standard")
+        .describe("Conv2D mode: Information required to interpret Channel dimension correctly");
   }
 };
 

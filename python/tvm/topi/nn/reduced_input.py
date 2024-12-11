@@ -22,7 +22,7 @@ from ..utils import get_const_tuple
 
 
 
-def reduced_input(data, strides: list, weight_shape: list,  kernel_layout:str, data_layout:str):
+def reduced_input(data: te.Tensor, strides, weight_shape, kernel_layout, data_layout, mode):
     """Applies the reduced input checksum opertaion on the input array (Hari et al).
 
     Reduces data dimension to the according filter dimension for non unit strided conv2D
@@ -38,6 +38,8 @@ def reduced_input(data, strides: list, weight_shape: list,  kernel_layout:str, d
         Kernel layout required to check on weight shape
     data_layout:str,
         Data layout of original conv2d required to interpret data shape
+    mode: str
+        Used to interpret weigh_shape dimensions (depth/group vs standard conv)
     Returns
     -------
     result : tvm.te.Tensor
