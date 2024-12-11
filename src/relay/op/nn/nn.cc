@@ -112,13 +112,13 @@ bool ReducedInputRel(const Array<Type>& types, int num_inputs, const Attrs& attr
 
   // calculate output shape (shifted to OIHW for tensor-tensor dot when depthwise)
   std::vector<IndexExpr> oshape(wnum_axis);
-  oshape[data_dim_pos.pos_N] = param->weight_shape[weight_dim_pos.pos_O];
-  oshape[data_dim_pos.pos_C] = param->weight_shape[weight_dim_pos.pos_I];
-  oshape[data_dim_pos.pos_H] = param->weight_shape[weight_dim_pos.pos_H];
-  oshape[data_dim_pos.pos_W] = param->weight_shape[weight_dim_pos.pos_W];
+  oshape[data_dim_pos.pos_N] = Integer(1);//param->weight_shape[weight_dim_pos.pos_O];
+  oshape[data_dim_pos.pos_C] = dshape[data_dim_pos.pos_C];
+  oshape[data_dim_pos.pos_H] = wshape[weight_dim_pos.pos_H];
+  oshape[data_dim_pos.pos_W] = wshape[weight_dim_pos.pos_W];
 
   // assume data type is 32 bit for now ;)
-  reporter->Assign(types[1], TensorType(oshape, data->dtype));
+  reporter->Assign(types[1], TensorType(oshape, DataType::Int(32)));
   return true;
 }
 
@@ -131,11 +131,6 @@ InferCorrectLayoutOutput ReducedInputInferCorrectLayout(const Attrs& attrs,
 }
 
 
-Array<te::Tensor> ReducedInputCompute(const Attrs& attrs,
-  const Array<te::Tensor>& input, const Type& out_type) {
-  const ReducedInputAttrs* param = attrs.as<ReducedInputAttrs>();
-  return Array<te::Tensor>{topi::reduced_input(input[0], param->strides, param->weight_shape, param->kernel_layout, param->data_layout)};
-}
 
 
 Expr MakeReducedInput(Expr data, Shape strides, Shape weight_shape, String kernel_lay, String data_lay) {

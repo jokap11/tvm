@@ -517,14 +517,19 @@ def conv2d_transpose_strategy(attrs, inputs, out_type, target):
     return strategy
 
 
-def compute_reduced_input(attrs, inputs, target):
-    weight_shape = get_const_tuple(attrs.weight_shape)
-    strides = get_const_tuple(attrs.strides)
-    kernel_layout = attrs.kernel_layout
-    data_layout = attrs.data_layout
-    args = [inputs[0], strides, weight_shape, kernel_layout, data_layout]
-    return [topi.nn.reduced_input(*args)]
+def wrap_compute_reduced_input(topi_compute):
+    """wrap reduced_input topi compute"""
 
+    def compute_reduced_input(attrs, inputs, target):
+        """Compute definition of reduced_input"""
+        weight_shape = get_const_tuple(attrs.weight_shape)
+        strides = get_const_tuple(attrs.strides)
+        kernel_layout = attrs.kernel_layout
+        data_layout = attrs.data_layout
+        mode = attrs.mode
+        out = topi_compute(inputs[0], strides, weight_shape, kernel_layout, data_layout, mode)
+        return [out]
+    return compute_reduced_input
 
 
 
@@ -532,12 +537,11 @@ def compute_reduced_input(attrs, inputs, target):
 def reduced_input_strategy(attrs, inputs, out_type, target):
     strategy = _op.OpStrategy()
     strategy.add_implementation(
-        compute_reduced_input,
-         wrap_topi_schedule(topi.generic.schedule_reduced_input),
+        wrap_compute_reduced_input(topi.nn.reduced_input),
+        wrap_topi_schedule(topi.generic.schedule_reduced_input),
         name="strategy_reduced_input.generic",
     )
     return strategy
-
 
 # conv3d_transpose
 def wrap_compute_conv3d_transpose(topi_compute):
