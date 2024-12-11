@@ -478,7 +478,7 @@ tensor_weight_dim_pos infer_weight_tensor_dim_pos(const Conv2DAttrs* orig_conv_a
  *                /                                                /
  *               /                                                /
 */      
-        Call batchwise_sum_input;
+        Call input_checksum;
         auto reduce_batch_axis_attrs = make_object<ReduceAttrs>();
         reduce_batch_axis_attrs->keepdims = true;  // 4D -> 4D We want a Conv2D (tensor*tensor) tensor = (1,C,S,R)
         reduce_batch_axis_attrs->exclude = false;
@@ -508,20 +508,16 @@ tensor_weight_dim_pos infer_weight_tensor_dim_pos(const Conv2DAttrs* orig_conv_a
 
           Call depthwise_conv(conv2d_op, {input, depthwise_kernel}, Attrs{depthwise_conv_attr});
 
-          batchwise_sum_input = Call(sum_op, {depthwise_conv}, Attrs(reduce_batch_axis_attrs));  // use batch as axis for depthwise sum
+          input_checksum = Call(sum_op, {depthwise_conv}, Attrs(reduce_batch_axis_attrs));  // use batch as axis for depthwise sum
         }else {
-          Call input_32bit(cast_op, {input}, Attrs(cast_attr_32bit));
-          Call batchsum_input(sum_op, {input_32bit}, Attrs(reduce_batch_axis_attrs));  // use batch as axis for depthwise sum
+          // Call input_32bit(cast_op, {input}, Attrs(cast_attr_32bit));
+          // Call batchsum_input(sum_op, {input_32bit}, Attrs(reduce_batch_axis_attrs));  // use batch as axis for depthwise sum
 
            // reduced_input requires only 1 as output (depthwise and standard conv have same dim interpretation for data layout)
-          //switch from depth/groupwise layout interpretation to standard interpretation (pos_I <- pos_O)
+          //switch from depth/groupwise layout interpretation to standard interpretation with mode attr(pos_I <- pos_O)
           std::array<PrimExpr, 4> reduced_weight_shape;
-          reduced_weight_shape[weight_dim_pos.pos_O] = Integer(1);
-          if(!depth){
-            reduced_weight_shape[weight_dim_pos.pos_I] = weight_tensor->shape[weight_dim_pos.pos_I];
-          }else{
-            reduced_weight_shape[weight_dim_pos.pos_I] = weight_tensor->shape[weight_dim_pos.pos_O];
-          }
+          reduced_weight_shape[weight_dim_pos.pos_O] = weight_tensor->shape[weight_dim_pos.pos_O];
+          reduced_weight_shape[weight_dim_pos.pos_I] = weight_tensor->shape[weight_dim_pos.pos_I];
           reduced_weight_shape[weight_dim_pos.pos_H] = weight_tensor->shape[weight_dim_pos.pos_H];
           reduced_weight_shape[weight_dim_pos.pos_W] = weight_tensor->shape[weight_dim_pos.pos_W];
 
@@ -529,12 +525,14 @@ tensor_weight_dim_pos infer_weight_tensor_dim_pos(const Conv2DAttrs* orig_conv_a
           reduce_input_attrs->kernel_layout = orig_conv_attr->kernel_layout;
           reduce_input_attrs->data_layout = orig_conv_attr->data_layout;
           reduce_input_attrs->strides = {orig_conv_attr->strides[0], orig_conv_attr->strides[1]};
-          reduce_input_attrs->weight_shape = Array<PrimExpr>{reduced_weight_shape[0], reduced_weight_shape[1], reduced_weight_shape[2], reduced_weight_shape[3] };
+          reduce_input_attrs->weight_shape = Array<PrimExpr>{reduced_weight_shape[0], reduced_weight_shape[1], reduced_weight_shape[2], reduced_weight_shape[3]}; //HWIO
           reduce_input_attrs->out_dtype  = DataType::Int(32);
-          batchwise_sum_input = Call(reduced_input, {batchsum_input}, Attrs(reduce_input_attrs));
+          reduce_input_attrs->mode = (depth) ?  "depth" : "standard";
+          Call reduced_input_tensor(reduced_input, {input}, Attrs(reduce_input_attrs));
+          input_checksum = Call(sum_op, {reduced_input_tensor}, Attrs(reduce_batch_axis_attrs));  // use batch for sum
         }
 
-        Call filterwise_sum_input;
+        Call filter_checksum;
 
         if(weight_tensor->dtype.is_int()){
           cast_attr_32bit->dtype = DataType::Int(32);
@@ -549,22 +547,22 @@ tensor_weight_dim_pos infer_weight_tensor_dim_pos(const Conv2DAttrs* orig_conv_a
           reduce_filter_axis_attrs->keepdims = true;
           reduce_filter_axis_attrs->exclude  = false;
           reduce_filter_axis_attrs->axis = {weight_dim_pos.pos_O}; //Get the N-th dimension in data layout
-          filterwise_sum_input = Call(sum_op, {weight_32bit},  Attrs(reduce_filter_axis_attrs));  // add each element of indiv filter
+          filter_checksum = Call(sum_op, {weight_32bit},  Attrs(reduce_filter_axis_attrs));  // add each element of indiv filter
         }else{
           //depthwise Conv
           auto reduce_filter_depth_axis_attrs = make_object<ReduceAttrs>();
           reduce_filter_depth_axis_attrs->keepdims = true;
           reduce_filter_depth_axis_attrs->exclude  = false;
           reduce_filter_depth_axis_attrs->axis = {weight_dim_pos.pos_I}; //Get the K-th dimension in kernel layout = depth_multiplier
-          Call filterwise_sum_input_wrong_dim = Call(sum_op, {weight_32bit},  Attrs(reduce_filter_depth_axis_attrs));  // add each element of indiv filter
+          Call filter_checksum_wrong_dim = Call(sum_op, {weight_32bit},  Attrs(reduce_filter_depth_axis_attrs));  // add each element of indiv filter
           //Transpose filter for tensor-tensor dot product
           auto transpose_attrs = infer_axis_transpose_from_kernel_layout(orig_conv_attr);
-          filterwise_sum_input = Call(transpose, {filterwise_sum_input_wrong_dim},  Attrs(transpose_attrs));
+          filter_checksum = Call(transpose, {filter_checksum_wrong_dim},  Attrs(transpose_attrs));
         }
         // Simple Vector-Vector dot product of 3D Tensors (Checksum dot product)
         Shape weight_shape = origin_conv2d->args[1]->type_as<TensorTypeNode>()->shape;
         auto ten_ten_prod_attr = create_ten_ten_prod_attr(weight_shape, orig_conv_attr, weight_dim_pos);
-        Call ten_ten_prod(conv2d_op, {batchwise_sum_input, filterwise_sum_input}, Attrs(ten_ten_prod_attr));
+        Call ten_ten_prod(conv2d_op, {input_checksum, filter_checksum}, Attrs(ten_ten_prod_attr));
         
 
 
