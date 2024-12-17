@@ -488,49 +488,26 @@ tensor_weight_dim_pos infer_weight_tensor_dim_pos(const Conv2DAttrs* orig_conv_a
 
         bool depth = IsDepthwiseConv(origin_conv2d, orig_conv_attr, orig_conv_attr->kernel_layout);
 
-        if ((Downcast<IntImm>(orig_conv_attr->strides[0])->value == 1) &&
-            (Downcast<IntImm>(orig_conv_attr->strides[1])->value == 1)) {
-          /// Implement depth-wise conv with conv2d Operation (Group arg splits input into C
-          /// seperate batches)
-          Shape one_tensor = infer_output_shape_conv2d(
-              origin_conv2d, orig_conv_attr, data_dim_pos,
-              weight_dim_pos);  // C1PQ for NCHW, but supports also other layouts
+        // Call input_32bit(cast_op, {input}, Attrs(cast_attr_32bit));
+        // Call batchsum_input(sum_op, {input_32bit}, Attrs(reduce_batch_axis_attrs));  // use batch as axis for depthwise sum
 
-          tvm::runtime::ObjectPtr<tvm::relay::Conv2DAttrs> depthwise_conv_attr;
-          if (static_cast<std::string>(orig_conv_attr->data_layout) == "NCHW") {  //->OIHW
-            depthwise_conv_attr = create_depthwise_conv_attr(
-                orig_conv_attr, one_tensor[2], one_tensor[3], Downcast<IntImm>(one_tensor[0]));
-          } else if (static_cast<std::string>(orig_conv_attr->data_layout) == "NHWC") {  //->HWIO
-            depthwise_conv_attr = create_depthwise_conv_attr(
-                orig_conv_attr, one_tensor[0], one_tensor[1], Downcast<IntImm>(one_tensor[3]));
-          }
-          auto depthwise_kernel = Ones(one_tensor, input_tensor->dtype);
+          // reduced_input requires only 1 as output (depthwise and standard conv have same dim interpretation for data layout)
+        //switch from depth/groupwise layout interpretation to standard interpretation with mode attr(pos_I <- pos_O)
+        std::array<PrimExpr, 4> reduced_weight_shape;
+        reduced_weight_shape[weight_dim_pos.pos_O] = weight_tensor->shape[weight_dim_pos.pos_O];
+        reduced_weight_shape[weight_dim_pos.pos_I] = weight_tensor->shape[weight_dim_pos.pos_I];
+        reduced_weight_shape[weight_dim_pos.pos_H] = weight_tensor->shape[weight_dim_pos.pos_H];
+        reduced_weight_shape[weight_dim_pos.pos_W] = weight_tensor->shape[weight_dim_pos.pos_W];
 
-          Call depthwise_conv(conv2d_op, {input, depthwise_kernel}, Attrs{depthwise_conv_attr});
-
-          input_checksum = Call(sum_op, {depthwise_conv}, Attrs(reduce_batch_axis_attrs));  // use batch as axis for depthwise sum
-        }else {
-          // Call input_32bit(cast_op, {input}, Attrs(cast_attr_32bit));
-          // Call batchsum_input(sum_op, {input_32bit}, Attrs(reduce_batch_axis_attrs));  // use batch as axis for depthwise sum
-
-           // reduced_input requires only 1 as output (depthwise and standard conv have same dim interpretation for data layout)
-          //switch from depth/groupwise layout interpretation to standard interpretation with mode attr(pos_I <- pos_O)
-          std::array<PrimExpr, 4> reduced_weight_shape;
-          reduced_weight_shape[weight_dim_pos.pos_O] = weight_tensor->shape[weight_dim_pos.pos_O];
-          reduced_weight_shape[weight_dim_pos.pos_I] = weight_tensor->shape[weight_dim_pos.pos_I];
-          reduced_weight_shape[weight_dim_pos.pos_H] = weight_tensor->shape[weight_dim_pos.pos_H];
-          reduced_weight_shape[weight_dim_pos.pos_W] = weight_tensor->shape[weight_dim_pos.pos_W];
-
-          auto reduce_input_attrs = make_object<ReducedInputAttrs>();
-          reduce_input_attrs->kernel_layout = orig_conv_attr->kernel_layout;
-          reduce_input_attrs->data_layout = orig_conv_attr->data_layout;
-          reduce_input_attrs->strides = {orig_conv_attr->strides[0], orig_conv_attr->strides[1]};
-          reduce_input_attrs->weight_shape = Array<PrimExpr>{reduced_weight_shape[0], reduced_weight_shape[1], reduced_weight_shape[2], reduced_weight_shape[3]}; //HWIO
-          reduce_input_attrs->out_dtype  = DataType::Int(32);
-          reduce_input_attrs->mode = (depth) ?  "depth" : "standard";
-          Call reduced_input_tensor(reduced_input, {input}, Attrs(reduce_input_attrs));
-          input_checksum = Call(sum_op, {reduced_input_tensor}, Attrs(reduce_batch_axis_attrs));  // use batch for sum
-        }
+        auto reduce_input_attrs = make_object<ReducedInputAttrs>();
+        reduce_input_attrs->kernel_layout = orig_conv_attr->kernel_layout;
+        reduce_input_attrs->data_layout = orig_conv_attr->data_layout;
+        reduce_input_attrs->strides = {orig_conv_attr->strides[0], orig_conv_attr->strides[1]};
+        reduce_input_attrs->weight_shape = Array<PrimExpr>{reduced_weight_shape[0], reduced_weight_shape[1], reduced_weight_shape[2], reduced_weight_shape[3]}; //HWIO
+        reduce_input_attrs->out_dtype  = DataType::Int(32);
+        reduce_input_attrs->mode = (depth) ?  "depth" : "standard";
+        Call reduced_input_tensor(reduced_input, {input}, Attrs(reduce_input_attrs));
+        input_checksum = Call(sum_op, {reduced_input_tensor}, Attrs(reduce_batch_axis_attrs));  // use batch for sum
 
         Call filter_checksum;
 
