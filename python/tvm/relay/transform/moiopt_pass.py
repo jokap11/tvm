@@ -502,7 +502,7 @@ class MinimizeRAMWithTupleOrder(ExprMutator):
         analyzer = GraphAnalyzer()
         analyzer.run(top_level_func)
         n = analyzer.makeNet()
-        best_sched = n.createBestSchedule()
+        best_sched = n.createAnySchedule()
 
         node_list = save_toplevel_tuple_info(top_level_func)
         #print(f"this is the unordered tuple_list {node_list}")
